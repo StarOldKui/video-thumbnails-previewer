@@ -32,12 +32,13 @@ describe("manifest policy", () => {
     expect(hostPermissions).not.toContain("https://*/*")
   })
 
-  it("does not request removed provider hosts", () => {
+  it("requests only Recurbate and stripe resource hosts", () => {
     const hostPermissions = readPackage().manifest.host_permissions || []
 
-    expect(hostPermissions).not.toContain("*://*.sexkbj.com/*")
-    expect(hostPermissions).not.toContain("https://layback.cc/*")
-    expect(hostPermissions).not.toContain("*://*.koreanbj.club/*")
-    expect(hostPermissions).not.toContain("https://jilliandescribecompany.com/*")
+    expect(hostPermissions.sort()).toEqual([
+      "*://*.recu.club/*",
+      "*://*.recu.me/*",
+      "https://*.mediafront.club/*"
+    ])
   })
 })

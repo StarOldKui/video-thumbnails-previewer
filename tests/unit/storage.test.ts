@@ -1,26 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
-  getProviderDefaults,
+  DEFAULT_SETTINGS,
+  SETTINGS_KEY,
   getSettings,
-  getSettingsKey,
   setSettings
 } from "~runtime/storage"
-import type { VideoProvider } from "~providers/types"
 
 let storageGet: ReturnType<typeof vi.fn>
 let storageSet: ReturnType<typeof vi.fn>
-
-const provider: VideoProvider = {
-  id: "example",
-  defaults: {
-    displayMode: "embedded",
-    autoOpen: true
-  },
-  matches: ["*://example.com/*"],
-  getPageKey: () => "page",
-  loadPreview: async () => null
-}
 
 describe("storage", () => {
   beforeEach(() => {
@@ -37,37 +25,37 @@ describe("storage", () => {
     })
   })
 
-  it("derives provider settings keys from provider id", () => {
-    expect(getSettingsKey("youtube")).toBe("vtp:youtube:settings")
-  })
-
-  it("merges global defaults with provider defaults and stored values", async () => {
-    storageGet.mockResolvedValue({
-      [getSettingsKey(provider.id)]: {
-        autoOpen: false
-      }
-    })
-
-    await expect(getSettings(provider)).resolves.toEqual({
-      displayMode: "embedded",
-      autoOpen: false
-    })
-    expect(getProviderDefaults(provider)).toEqual({
+  it("uses one Recurbate settings key", () => {
+    expect(SETTINGS_KEY).toBe("rtp:settings")
+    expect(DEFAULT_SETTINGS).toEqual({
       displayMode: "embedded",
       autoOpen: true
     })
   })
 
-  it("writes settings to the provider-derived key", async () => {
+  it("merges defaults with stored values", async () => {
+    storageGet.mockResolvedValue({
+      [SETTINGS_KEY]: {
+        autoOpen: false
+      }
+    })
+
+    await expect(getSettings()).resolves.toEqual({
+      displayMode: "embedded",
+      autoOpen: false
+    })
+  })
+
+  it("writes settings to the Recurbate key", async () => {
     storageSet.mockResolvedValue(undefined)
 
-    await setSettings(provider, {
+    await setSettings({
       displayMode: "popup",
       autoOpen: false
     })
 
     expect(storageSet).toHaveBeenCalledWith({
-      [getSettingsKey(provider.id)]: {
+      [SETTINGS_KEY]: {
         displayMode: "popup",
         autoOpen: false
       }

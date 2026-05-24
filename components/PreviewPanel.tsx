@@ -1,6 +1,6 @@
 import { useEffect } from "react"
 
-import type { DisplayMode, PreviewData, PreviewThumbnail } from "~providers/types"
+import type { DisplayMode, PreviewData, PreviewThumbnail } from "~runtime/types"
 import { formatDuration } from "~runtime/processing"
 
 interface PreviewPanelProps {
@@ -28,7 +28,7 @@ function ThumbnailImage({ thumbnail }: { thumbnail: PreviewThumbnail }) {
 
   return (
     <span
-      className="vtp-sprite-frame"
+      className="rtp-sprite-frame"
       style={{ aspectRatio: `${sourceWidth} / ${sourceHeight}` }}>
       <img
         alt={`Thumbnail ${thumbnail.index}`}
@@ -65,27 +65,27 @@ export function PreviewPanel({
 
   return (
     <div
-      className={mode === "popup" ? "vtp-popup-overlay" : undefined}
-      id={mode === "popup" ? "vtp-popup-container" : undefined}
+      className={mode === "popup" ? "rtp-popup-overlay" : undefined}
+      id={mode === "popup" ? "rtp-popup-container" : undefined}
       onClick={mode === "popup" ? onClose : undefined}>
       <section
         className={
           mode === "embedded"
-            ? "vtp-panel vtp-panel-embedded"
-            : "vtp-panel vtp-panel-popup"
+            ? "rtp-panel rtp-panel-embedded"
+            : "rtp-panel rtp-panel-popup"
         }
-        id={mode === "embedded" ? "vtp-embedded-container" : undefined}
+        id={mode === "embedded" ? "rtp-embedded-container" : undefined}
         onClick={(event) => event.stopPropagation()}>
-        <header className="vtp-header">
-          <h2 className="vtp-title">{title}</h2>
+        <header className="rtp-header">
+          <h2 className="rtp-title">{title}</h2>
           <button
             aria-label="Close preview"
-            className="vtp-icon-button"
+            className="rtp-icon-button"
             onClick={onClose}
             type="button">
             <svg
               aria-hidden="true"
-              className="vtp-close-icon"
+              className="rtp-close-icon"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24">
@@ -99,21 +99,21 @@ export function PreviewPanel({
           </button>
         </header>
 
-        <div className="vtp-body vtp-auto-hide-scrollbar">
+        <div className="rtp-body rtp-auto-hide-scrollbar">
           {loading ? (
-            <div className="vtp-state">
-              <div className="vtp-spinner" />
+            <div className="rtp-state">
+              <div className="rtp-spinner" />
               <p>Loading thumbnails...</p>
             </div>
           ) : null}
           {error ? (
-            <div className="vtp-state vtp-error">
-              <div className="vtp-error-icon" />
+            <div className="rtp-state rtp-error">
+              <div className="rtp-error-icon" />
               <p>{error}</p>
             </div>
           ) : null}
           {!loading && !error && data && data.thumbnails.length === 0 ? (
-            <div className="vtp-state">
+            <div className="rtp-state">
               <p>No thumbnails found.</p>
             </div>
           ) : null}
@@ -121,12 +121,12 @@ export function PreviewPanel({
             <div
               className={
                 data.thumbnails.some((thumbnail) => thumbnail.raw)
-                  ? "vtp-grid vtp-grid-raw"
-                  : "vtp-grid"
+                  ? "rtp-grid rtp-grid-raw"
+                  : "rtp-grid"
               }>
               {data.thumbnails.map((thumbnail) => (
                 <button
-                  className="vtp-card"
+                  className="rtp-card"
                   data-raw={thumbnail.raw ? "true" : "false"}
                   key={`${thumbnail.index}-${thumbnail.timestamp ?? "raw"}`}
                   onClick={() => {
@@ -142,7 +142,7 @@ export function PreviewPanel({
           ) : null}
         </div>
 
-        <footer className="vtp-footer">
+        <footer className="rtp-footer">
           <div>
             Total thumbnails: {data?.metadata.totalThumbnails || 0}
             {data?.metadata.videoDuration ? (

@@ -1,19 +1,14 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 
 import logoUrl from "url:assets/icon.rounded.png"
 import "~style.css"
-import { findHostProvider } from "~providers/registry"
-import type { ProviderSettings, VideoProvider } from "~providers/types"
+import { getRecurbatePageKey, isRecurbateUrl } from "~recurbate/url"
 import { getSettings, setSettings } from "~runtime/storage"
+import type { Settings } from "~runtime/types"
 
 interface ActiveTab {
   id: number
   url: URL
-}
-
-interface ActiveSite {
-  provider: VideoProvider
-  pageKey: string | null
 }
 
 async function getActiveTab(): Promise<ActiveTab | null> {
@@ -54,18 +49,18 @@ async function sendOpenPreview(tabId: number, message: unknown): Promise<boolean
 
 function PopupFrame({ children }: { children: ReactNode }) {
   return (
-    <main className="vtp-popup-shell">
-      <div className="vtp-popup-background" />
-      <div className="vtp-popup-glow vtp-popup-glow-top" />
-      <div className="vtp-popup-glow vtp-popup-glow-bottom" />
-      <div className="vtp-popup-content">
-        <div className="vtp-popup-header">
+    <main className="rtp-popup-shell">
+      <div className="rtp-popup-background" />
+      <div className="rtp-popup-glow rtp-popup-glow-top" />
+      <div className="rtp-popup-glow rtp-popup-glow-bottom" />
+      <div className="rtp-popup-content">
+        <div className="rtp-popup-header">
           <img
-            alt="Video Thumbnails Previewer Logo"
-            className="vtp-popup-logo"
+            alt="Recurbate Thumbnails Previewer Logo"
+            className="rtp-popup-logo"
             src={logoUrl}
           />
-          <div className="vtp-popup-brand">Video Thumbnails Previewer</div>
+          <div className="rtp-popup-brand">Recurbate Thumbnails Previewer</div>
         </div>
         {children}
       </div>
@@ -74,11 +69,11 @@ function PopupFrame({ children }: { children: ReactNode }) {
 }
 
 export default function Popup() {
-  const [activeSite, setActiveSite] = useState<ActiveSite | null>(null)
   const [activeUrl, setActiveUrl] = useState<URL | null>(null)
   const [loaded, setLoaded] = useState(false)
+  const [pageKey, setPageKey] = useState<string | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
-  const [settings, setSettingsState] = useState<ProviderSettings | null>(null)
+  const [settings, setSettingsState] = useState<Settings | null>(null)
 
   useEffect(() => {
     const previousMargin = document.body.style.margin
@@ -99,22 +94,12 @@ export default function Popup() {
       try {
         const tab = await getActiveTab()
         if (cancelled) return
+
         setActiveUrl(tab?.url || null)
+        if (!isRecurbateUrl(tab?.url || null)) return
 
-        const provider = tab?.url ? findHostProvider(tab.url) : null
-        if (!provider || !tab?.url) return
-
-        const nextSettings = await getSettings(provider)
-        if (cancelled) return
-        setActiveSite({
-          provider,
-          pageKey: provider.getPageKey(tab.url)
-        })
-        setSettingsState(nextSettings)
-      } catch {
-        if (cancelled) return
-        setActiveSite(null)
-        setSettingsState(null)
+        setPageKey(tab?.url ? getRecurbatePageKey(tab.url) : null)
+        setSettingsState(await getSettings())
       } finally {
         if (!cancelled) setLoaded(true)
       }
@@ -127,15 +112,9 @@ export default function Popup() {
     }
   }, [])
 
-  const canUseEmbedded = useMemo(
-    () => Boolean(activeSite?.provider.mount?.embedded),
-    [activeSite?.provider.id]
-  )
-
-  const updateSettings = async (next: ProviderSettings) => {
-    if (!activeSite) return
+  const updateSettings = async (next: Settings) => {
     setSettingsState(next)
-    await setSettings(activeSite.provider, next)
+    await setSettings(next)
   }
 
   const openPreview = async () => {
@@ -143,14 +122,12 @@ export default function Popup() {
 
     setPreviewError(null)
     const tab = await getActiveTab()
-    const provider = tab?.url ? findHostProvider(tab.url) : null
-    const pageKey = provider?.getPageKey(tab.url) || null
-    if (!tab || !provider || !pageKey) return
+    const nextPageKey = tab?.url ? getRecurbatePageKey(tab.url) : null
+    if (!tab || !nextPageKey) return
 
     const opened = await sendOpenPreview(tab.id, {
-      type: "vtp:open-preview",
-      providerId: provider.id,
-      pageKey,
+      type: "rtp:open-preview",
+      pageKey: nextPageKey,
       mode: settings.displayMode
     })
     if (opened) {
@@ -160,24 +137,24 @@ export default function Popup() {
     setPreviewError("Preview could not be opened. Please try again.")
   }
 
-  if (!activeSite || !settings) {
+  if (!settings) {
     return (
       <PopupFrame>
         {!loaded ? (
-          <div className="vtp-popup-loader" aria-label="Loading">
+          <div className="rtp-popup-loader" aria-label="Loading">
             <span />
             <span />
             <span />
           </div>
         ) : (
-          <section className="vtp-popup-card">
-            <div className="vtp-popup-card-row">
-              <div className="vtp-popup-site-name">{getDomain(activeUrl)}</div>
-              <span className="vtp-popup-status vtp-popup-status-muted">
-                Not Supported
+          <section className="rtp-popup-card">
+            <div className="rtp-popup-card-row">
+              <div className="rtp-popup-site-name">{getDomain(activeUrl)}</div>
+              <span className="rtp-popup-status rtp-popup-status-muted">
+                Not Recurbate
               </span>
             </div>
-            <p className="vtp-popup-muted">This page is not supported yet.</p>
+            <p className="rtp-popup-muted">Open a Recurbate page to use RTP.</p>
           </section>
         )}
       </PopupFrame>
@@ -186,29 +163,27 @@ export default function Popup() {
 
   return (
     <PopupFrame>
-      <section className="vtp-popup-card">
-        <div className="vtp-popup-card-row">
-          <div className="vtp-popup-site-name">
-            {activeSite.provider.label || activeSite.provider.id}
-          </div>
-          <span className="vtp-popup-status vtp-popup-status-active">
+      <section className="rtp-popup-card">
+        <div className="rtp-popup-card-row">
+          <div className="rtp-popup-site-name">Recurbate</div>
+          <span className="rtp-popup-status rtp-popup-status-active">
             Activated
           </span>
         </div>
       </section>
 
-      <section className="vtp-popup-card">
-        <div className="vtp-popup-section-title">
-          <span className="vtp-popup-section-icon" />
+      <section className="rtp-popup-card">
+        <div className="rtp-popup-section-title">
+          <span className="rtp-popup-section-icon" />
           Display Settings
         </div>
 
-        <div className="vtp-display-toggle">
+        <div className="rtp-display-toggle">
           <button
             className={
               settings.displayMode === "popup"
-                ? "vtp-display-option vtp-display-option-active"
-                : "vtp-display-option"
+                ? "rtp-display-option rtp-display-option-active"
+                : "rtp-display-option"
             }
             onClick={() =>
               updateSettings({
@@ -222,12 +197,10 @@ export default function Popup() {
           <button
             className={
               settings.displayMode === "embedded"
-                ? "vtp-display-option vtp-display-option-active"
-                : "vtp-display-option"
+                ? "rtp-display-option rtp-display-option-active"
+                : "rtp-display-option"
             }
-            disabled={!canUseEmbedded}
             onClick={() =>
-              canUseEmbedded &&
               updateSettings({
                 ...settings,
                 displayMode: "embedded"
@@ -238,14 +211,14 @@ export default function Popup() {
           </button>
         </div>
 
-        <div className="vtp-popup-toggle-row">
+        <div className="rtp-popup-toggle-row">
           <span>Auto Trigger</span>
           <button
             aria-pressed={settings.autoOpen}
             className={
               settings.autoOpen
-                ? "vtp-switch vtp-switch-active"
-                : "vtp-switch"
+                ? "rtp-switch rtp-switch-active"
+                : "rtp-switch"
             }
             onClick={() =>
               updateSettings({
@@ -258,22 +231,22 @@ export default function Popup() {
           </button>
         </div>
 
-        <div className="vtp-popup-divider" />
+        <div className="rtp-popup-divider" />
 
         <button
-          className="vtp-generate-button"
-          disabled={!activeSite.pageKey}
+          className="rtp-generate-button"
+          disabled={!pageKey}
           onClick={openPreview}
           type="button">
-          <span className="vtp-generate-icon" />
+          <span className="rtp-generate-icon" />
           Generate Preview
         </button>
-        {!activeSite.pageKey ? (
-          <p className="vtp-popup-muted">
-            Open a supported video page to generate previews.
+        {!pageKey ? (
+          <p className="rtp-popup-muted">
+            Open a Recurbate video page to generate previews.
           </p>
         ) : null}
-        {previewError ? <p className="vtp-popup-muted">{previewError}</p> : null}
+        {previewError ? <p className="rtp-popup-muted">{previewError}</p> : null}
       </section>
     </PopupFrame>
   )

@@ -3,19 +3,19 @@
 ## Maintenance Rule
 
 - This codemap is the latest architecture snapshot for this project.
-- Update it when system boundaries, provider contracts, runtime state, permissions, build outputs, or background capabilities change.
+- Update it when system boundaries, runtime state, permissions, build outputs, or background capabilities change.
 - Keep migration history, changelogs, and design debates out of this file.
 - Prefer verified facts from source code, package metadata, generated manifests, and official platform docs.
 
 ## Product Boundary
 
-- Product name: Video Thumbnails Previewer.
+- Product name: Recurbate Thumbnails Previewer.
 - Project path: `/Users/alen/Shrimpfall-Goose/Code/video-thumbnails-previewer-v2`.
 - This directory is the Plasmo MV3 browser extension root.
-- The project boundary is content-script UI, provider integrations, popup settings, local extension state, and background extension capabilities.
-- Hosted services and account-based product flows are outside the current extension boundary.
-- Adjacent reference path: `/Users/alen/Shrimpfall-Goose/Code/video-thumbnails-previewer` is outside this project boundary.
-- The directory is initialized as a git repository.
+- The project boundary is Recurbate content-script UI, popup settings, local extension state, thumbnail image processing, and background extension capabilities.
+- Supported page hosts are `recu.me` and `recu.club`.
+- The extension fetches timeline stripe images from Recurbate resource hosts such as `mediafront.club`.
+- Hosted services, account-based product flows, and support for other websites are outside the current extension boundary.
 
 ## Runtime Sources Of Truth
 
@@ -23,74 +23,69 @@
 - Coding-agent project instructions: `AGENTS.md`.
 - Content script entry: `content.tsx`.
 - Popup entry: `popup.tsx`.
-- Provider registry: `providers/registry.ts`.
-- Provider contract: `providers/types.ts`.
+- Recurbate URL detection: `recurbate/url.ts`.
+- Recurbate preview loading and seek behavior: `recurbate/index.ts`.
+- Recurbate performer-page buttons: `recurbate/features.ts`.
+- Recurbate main-world actions: `recurbate/background.ts`.
 - Local state contract: `runtime/storage.ts`.
 - Content-to-background client wrappers: `runtime/background-client.ts`.
+- Shared preview data types: `runtime/types.ts`.
+- Shared thumbnail processing: `runtime/processing.ts`.
 - Background message handlers: `background/messages/*.ts`.
 - Preview rendering: `components/PreviewPanel.tsx` and `style.css`.
 - Unit tests: `tests/unit/*.test.ts`.
 - Vitest config: `vitest.config.mts`.
 - Generated runtime manifest: `build/chrome-mv3-prod/manifest.json`.
 
-## Provider Model
+## Recurbate Model
 
-- Providers are imported explicitly in `providers/registry.ts`.
-- `findProvider(url)` selects a provider by `provider.matches` and then `provider.getPageKey(url)`.
-- `findHostProvider(url)` selects a host-level provider by `provider.matches`.
-- Required provider fields are `id`, `matches`, `getPageKey`, and `loadPreview`.
-- Optional provider fields are `label`, `autoOpenScope`, `defaults`, `mount`, and `features`.
-- Provider settings storage keys are derived from `id` by `runtime/storage.ts`: `vtp:${providerId}:settings`.
+- `content.tsx` keeps content-script matches as a literal array because Plasmo statically analyzes that export during build.
+- `RECURBATE_MATCHES` in `recurbate/url.ts` mirrors the same host patterns for tests and runtime-adjacent checks.
+- `isRecurbateUrl(url)` gates content and popup behavior to `recu.me` and `recu.club`.
+- `getRecurbatePageKey(url)` extracts the numeric `/video/{id}` page key.
+- Settings are stored under one key: `rtp:settings`.
+- Default settings are `displayMode: "embedded"` and `autoOpen: true`.
 - Preview visibility is tab-local React state in `content.tsx`; it is not persisted in extension storage.
-- Global settings defaults are `displayMode: "popup"` and `autoOpen: false`.
-- Provider defaults override global defaults through `getProviderDefaults(provider)`.
-
-## Provider Inventory
-
-- `providers/youtube/index.ts`: YouTube watch pages, storyboard metadata, direct sprite preview rendering, stale SPA data recovery from current watch data, and player seeking.
-- `providers/twitch/index.ts`: Twitch VOD pages, GQL preview metadata, sprite image fetching, embedded default mode, and player seeking.
-- `providers/recurbate/index.ts`: Recurbate video pages, timeline stripe detection, embedded default mode, and video seeking.
-- `providers/recurbate/features.ts`: Recurbate performer-page Open All, Save Range, and Save All actions.
-- `providers/missav/index.ts`: MissAV video pages, main-world thumbnail config extraction, raw sprite rendering, cold-start playback, and player seeking.
-- `providers/pornhub/index.ts`: PornHub video pages, main-world sprite metadata extraction, sprite processing, and player seeking.
-- `providers/pornhub/features.ts`: PornHub model-page Open All action.
-- `providers/pimpbunny/index.ts`: PimpBunny video pages, DOM video id extraction, background thumbnail URL probing, and player seeking.
 
 ## Content Runtime Flow
 
 - Plasmo injects the single content UI from `content.tsx` into `document.body`.
-- The Plasmo shadow host id is `vtp-root` for deterministic runtime inspection.
-- `config.matches` statically limits injection to supported page families.
-- YouTube and Twitch use host-level content-script matches so SPA navigation from non-video pages into video pages is covered.
-- `useCurrentUrl()` tracks SPA URL changes through history events, `popstate`, and a polling fallback.
-- The active page provider is recalculated from the URL and page key.
-- `useSettings()` loads provider settings from `chrome.storage.local`.
-- The current tab owns preview visibility, mode, and page key in local React state.
-- Display-mode changes update an already visible preview without reloading provider preview data.
-- Auto open runs on each video page by default. Providers with `autoOpenScope: "tab"` only auto-expand once per content app lifecycle, which is used for SPA-style providers.
+- The Plasmo shadow host id is `rtp-root` for deterministic runtime inspection.
+- `config.matches` statically limits injection to Recurbate page families.
+- `useCurrentUrl()` tracks URL changes through history events, `popstate`, and a polling fallback.
+- `useSettings()` loads Recurbate settings from `chrome.storage.local`.
+- Auto open runs on Recurbate video pages when settings enable it.
+- Content script startup removes stale page-level RTP mounts left by a previous extension reload before new portal mounts are created.
 - Popup-triggered preview opens are delivered to the active content script with `chrome.tabs.sendMessage`.
-- Preview loading calls `provider.loadPreview(context)` and stores the latest loaded token to avoid redundant reloads for the same provider, page, and open event.
-- If thumbnails were generated before the page video duration was available, `content.tsx` recovers generated timestamps once duration becomes available.
+- Preview loading calls `loadRecurbatePreview(context)` and stores the latest loaded token to avoid redundant reloads for the same page and open event.
 - Popup mode renders `PreviewPanel` as a fixed overlay through a `document.body` portal.
-- Embedded mode renders `PreviewPanel` through a provider-defined portal mount when `provider.mount.embedded` exists.
-- Preview buttons render through a provider-defined portal mount when `provider.mount.button` exists.
-- Portal mounts own their DOM host, remove stale same-variant hosts and stale portal children, and reattach only when the original anchor is replaced or detached.
-- Provider features mount when any matching host provider contains a feature whose `matches(url)` returns true.
+- Embedded mode renders `PreviewPanel` near `.video-content-wrapper ~ .video-info`.
+- The page button renders near `.plyr__time--current`.
+- Preview button clicks are handled by a page-level capture listener so Recurbate controls remain responsive if the page clones or replaces player control DOM.
+- Portal mounts own and reuse their DOM host, move it when the anchor is replaced, remove duplicate same-variant mounts after the current host is mounted, and clean up on unmount.
 
-## Popup Flow
+## Recurbate Preview Flow
 
-- `popup.tsx` reads the active browser tab URL with `chrome.tabs.query`.
-- The popup resolves site settings with `findHostProvider(url)`.
-- The popup enables the shared preview action only when the host provider also returns a video `pageKey`.
-- Settings are read and written through `getSettings(provider)` and `setSettings(provider, settings)`.
-- Opening the preview sends a tab-scoped `vtp:open-preview` message to the active content script.
-- The popup does not render provider-specific controls beyond shared display mode and auto-open settings.
+- `loadRecurbatePreview()` waits for `#timeline`.
+- If the timeline is not ready, it clicks `#play_button` once as a best-effort player initializer.
+- The stripe URL is read from `data-background-image` or the timeline background image style.
+- `runtime/background-client.ts` requests image bytes through `background/messages/fetch-images.ts`.
+- `runtime/processing.ts` slices the `1 x 128` stripe grid into preview thumbnails.
+- Thumbnail timestamps are derived from video duration when available, otherwise from timeline `data-duration` plus optional `data-preroll-duration`.
+- Clicking a thumbnail calls the Recurbate `seek` action first, then falls back to setting `video.currentTime` if the background action fails.
+- Embedded thumbnail clicks scroll back to the video. Popup thumbnail clicks close the overlay after seeking.
+
+## Performer-Page Features
+
+- `recurbate/features.ts` mounts Open All, Save Range, and Save All buttons on performer pages.
+- Open All opens same-host video links from the current performer page.
+- Save Range and Save All collect performer page video links, find stripe resources in same-host background tabs, fetch stripe images, and download a ZIP with failures recorded in `errors.txt`.
+- Batch work uses limited concurrency and same-host guards.
 
 ## Background Capabilities
 
 - `background/messages/fetch-images.ts` fetches image URLs, accepts image or binary-octet image responses, retries failures, and returns image data URLs.
-- `background/messages/provider-action.ts` dispatches provider-owned background actions by `providerId` and action name after sender URL validation.
-- Provider-owned background actions live in `providers/*/background.ts`.
+- `background/messages/recurbate-action.ts` dispatches Recurbate background actions after sender URL validation.
 - `background/messages/cancel-request.ts` aborts in-flight background requests by request id.
 - `background/messages/open-tabs.ts` opens same-host batches of tabs sequentially and responds after all requested tabs are created.
 - `background/messages/find-tab-resource.ts` opens a same-host background tab, waits with separate tab-ready and resource-scan budgets, scans resource timing entries for a resource pattern, and closes the tab.
@@ -100,8 +95,8 @@
 ## Permissions And Host Scope
 
 - Manifest permissions are `activeTab`, `scripting`, and `storage`.
-- Content-script matches are limited to the supported site page families.
-- Host permissions are limited to supported page hosts and extension-fetched resource hosts in `package.json`.
+- Content-script matches are limited to `*://*.recu.me/*` and `*://*.recu.club/*`.
+- Host permissions are limited to `*://*.recu.me/*`, `*://*.recu.club/*`, and `https://*.mediafront.club/*`.
 - The generated manifest contains no `cookies`, `<all_urls>`, `http://*/*`, or `https://*/*` broad injection rule.
 
 ## Build And Artifacts
@@ -110,7 +105,7 @@
 - Plasmo version: `plasmo@0.90.5`.
 - Main scripts: `pnpm dev`, `pnpm test`, `pnpm build`, `pnpm package`, and `pnpm verify`.
 - Unit test runner: Vitest with Node environment and a Plasmo `~` alias in `vitest.config.mts`.
-- Current unit coverage focuses on provider matching, provider page keys, storage defaults, request cancellation, background client messages, provider action isolation, generated timestamp recovery, raw sprite preview mapping, PimpBunny thumbnail count probing, same-host tab/resource guards, find-tab-resource timeout caps, and manifest policy.
+- Current unit coverage focuses on Recurbate URL detection, storage defaults, request cancellation, background client messages, Recurbate action isolation, same-host tab/resource guards, find-tab-resource timeout caps, and manifest policy.
 - Build output directory: `build/`.
 - Packaged Chrome MV3 zip: `build/chrome-mv3-prod.zip`.
 - Generated Plasmo cache directory: `.plasmo/`.
@@ -130,13 +125,15 @@
 - `AGENTS.md`
 - `package.json`
 - `content.tsx`
-- `providers/types.ts`
-- `providers/registry.ts`
+- `popup.tsx`
+- `recurbate/url.ts`
+- `recurbate/index.ts`
+- `recurbate/features.ts`
+- `recurbate/background.ts`
 - `runtime/storage.ts`
 - `runtime/background-client.ts`
-- `background/messages/provider-action.ts`
+- `background/messages/recurbate-action.ts`
 - `background/request-registry.ts`
-- `providers/match-pattern.ts`
 - `components/PreviewPanel.tsx`
 - `vitest.config.mts`
 - `tests/unit/`

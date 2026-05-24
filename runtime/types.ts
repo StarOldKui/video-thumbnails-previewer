@@ -1,6 +1,6 @@
 export type DisplayMode = "popup" | "embedded"
 
-export interface ProviderSettings {
+export interface Settings {
   displayMode: DisplayMode
   autoOpen: boolean
 }
@@ -37,9 +37,9 @@ export interface PreviewData {
   seekToTime?: (timestamp: number) => void | Promise<void>
 }
 
-export interface ProviderContext {
+export interface PreviewContext {
   pageKey: string
-  settings: ProviderSettings
+  settings: Settings
   signal?: AbortSignal
   afterThumbnailSeek: (videoSelector?: string) => void | Promise<void>
   closePreview: () => Promise<void>
@@ -50,14 +50,14 @@ export interface ProviderContext {
     timeoutMs?: number
   ) => Promise<string | null>
   openTabs: (urls: string[]) => Promise<number>
-  runProviderAction: <TResponse = unknown>(
+  runRecurbateAction: <TResponse = unknown>(
     action: string,
     payload?: unknown
   ) => Promise<TResponse>
   scrollToVideo: (selector?: string) => void
 }
 
-export interface ProviderFeatureContext {
+export interface FeatureContext {
   fetchImages: (urls: string[]) => Promise<string[]>
   findResource: (
     videoUrl: string,
@@ -65,32 +65,20 @@ export interface ProviderFeatureContext {
     timeoutMs?: number
   ) => Promise<string | null>
   openTabs: (urls: string[]) => Promise<number>
-  runProviderAction: <TResponse = unknown>(
+  runRecurbateAction: <TResponse = unknown>(
     action: string,
     payload?: unknown
   ) => Promise<TResponse>
 }
 
-export interface ProviderFeature {
-  id: string
+export interface RecurbateFeature {
+  id?: string
   matches: (url: URL) => boolean
-  mount: (context: ProviderFeatureContext) => void | (() => void)
+  mount: (context: FeatureContext) => void | (() => void)
 }
 
-export interface ProviderMount {
-  button?: string
-  embedded?: string
+export interface RecurbateMount {
+  button: string
+  embedded: string
   embeddedPosition?: InsertPosition
-}
-
-export interface VideoProvider {
-  id: string
-  label?: string
-  matches: string[]
-  autoOpenScope?: "tab"
-  defaults?: Partial<ProviderSettings>
-  mount?: ProviderMount
-  features?: ProviderFeature[]
-  getPageKey: (url: URL) => string | null
-  loadPreview: (context: ProviderContext) => Promise<PreviewData | null>
 }

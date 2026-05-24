@@ -52,7 +52,7 @@ describe("open-tabs handler", () => {
   it("rejects urls for another host", async () => {
     const response = await sendOpenTabs(
       {
-        urls: ["https://www.youtube.com/watch?v=abc"]
+        urls: ["https://example.com/video/abc"]
       },
       "https://recu.me/performer/demo"
     )

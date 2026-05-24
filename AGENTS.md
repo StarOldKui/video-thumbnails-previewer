@@ -2,51 +2,46 @@
 
 ## Project Intent
 
-- Video Thumbnails Previewer is a free, open-source Plasmo MV3 browser extension.
-- The repository scope is the browser extension itself; discuss product scope changes before adding hosted services or account-based flows.
-- Protect user trust with narrow permissions, predictable behavior, and no hidden remote dependencies.
-- Keep the extension simple, local-first, and easy for contributors to extend.
+- Recurbate Thumbnails Previewer is a free, open-source Plasmo MV3 browser extension.
+- The extension supports Recurbate pages on `recu.me` and `recu.club`.
+- Keep the project local-first, permission-light, and focused on previewing Recurbate timeline thumbnails.
+- Discuss product scope changes before adding hosted services, account-based flows, or support for another website.
 
 ## Read First
 
 - Read `docs/codemap.md` before changing code.
-- Read `providers/types.ts`, `providers/registry.ts`, and the closest existing provider before adding or changing provider logic.
 - Read every call site of the code you plan to edit before changing it.
+- For Recurbate page behavior, start with `recurbate/index.ts`, `recurbate/features.ts`, and `recurbate/background.ts`.
 
 ## Design Principles
 
 - Implement the simplest working version first.
 - Keep patches small and scoped to the requested behavior.
 - Avoid broad refactors, compatibility layers, speculative abstractions, and incidental cleanup.
-- Keep provider-specific behavior inside the provider folder.
+- Keep Recurbate-specific DOM, timeline, player, Open All, Save Range, and Save All behavior inside `recurbate/`.
 - Keep shared lifecycle, storage, background messaging, image processing, and rendering behavior in runtime or content-level code.
-- Prefer explicit declarations over build magic. Supported providers, content-script matches, and host permissions should remain easy to review in pull requests.
+- Prefer explicit declarations over build magic. Content-script matches and host permissions should remain easy to review in pull requests.
 - Do not introduce broad permissions such as `<all_urls>`, `http://*/*`, `https://*/*`, `tabs`, or `cookies` unless the product requirement explicitly changes.
 
-## Provider Rules
+## Recurbate Rules
 
-- A provider must implement `id`, `matches`, `getPageKey`, and `loadPreview`.
-- Treat `matches` as the host-level gate and `getPageKey` as the video-page gate.
-- Optional provider capabilities belong in `defaults`, `mount`, `features`, or provider-local background action files.
-- Add the provider to `providers/registry.ts`.
-- Add narrow content-script matches in `content.tsx` for video pages and feature-only pages that need injected UI.
-- Add only the host permissions needed for page access, image fetches, or scripting.
-- Provider background actions must define narrow sender URL matches.
-- Keep special site behavior isolated. Examples include custom DOM waits, player offsets, non-linear timestamps, Open All, Save All, and main-world extraction.
-- If timestamps are not evenly derivable from generated thumbnails, compute them in the provider instead of relying on runtime timestamp recovery.
+- `recurbate/url.ts` owns supported host and page-key detection.
+- `recurbate/index.ts` owns video-page preview loading and thumbnail seek behavior.
+- `recurbate/features.ts` owns performer-page Open All, Save Range, and Save All buttons.
+- `recurbate/background.ts` owns main-world player actions that need page JavaScript context.
+- Keep special Recurbate behavior isolated. Examples include custom DOM waits, timeline stripe detection, HLS stream resume, and performer-page batch actions.
 
 ## Testing Rules
 
 - Run `pnpm test` after behavior changes.
 - Run `pnpm build` after manifest, content-script, permission, or Plasmo entry changes.
-- For a new provider, manually verify and add focused unit coverage for page key extraction, provider registry selection, content-script match coverage, and manifest permissions.
-- If the provider uses background actions, test allowed and denied sender URLs.
-- If a provider depends on late video duration, test timestamp recovery or provider-owned timestamp generation.
+- Run `pnpm verify` before publishing a release or push.
+- Add focused unit coverage for URL detection, content-script match coverage, storage defaults, background message guards, and manifest permissions when those areas change.
 
 ## Codemap Rule
 
 - `docs/codemap.md` is the latest architecture snapshot.
-- Update it in the same change when system boundaries, provider contracts, runtime flow, permissions, background capabilities, build commands, or test contracts change.
+- Update it in the same change when system boundaries, runtime flow, permissions, background capabilities, build commands, or test contracts change.
 - Use a codemap-maintainer skill if the active agent supports it. Otherwise, update `docs/codemap.md` manually.
 - Keep codemap text present-tense and factual. Do not turn it into a changelog, migration diary, or design debate.
 

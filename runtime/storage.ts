@@ -1,35 +1,22 @@
-import type { ProviderSettings, VideoProvider } from "~providers/types"
+import type { Settings } from "~runtime/types"
 
-export const GLOBAL_DEFAULT_SETTINGS: ProviderSettings = {
-  displayMode: "popup",
-  autoOpen: false
+export const SETTINGS_KEY = "rtp:settings"
+
+export const DEFAULT_SETTINGS: Settings = {
+  displayMode: "embedded",
+  autoOpen: true
 }
 
-export function getSettingsKey(providerId: string): string {
-  return `vtp:${providerId}:settings`
-}
-
-export function getProviderDefaults(provider: VideoProvider): ProviderSettings {
+export async function getSettings(): Promise<Settings> {
+  const stored = await chrome.storage.local.get(SETTINGS_KEY)
   return {
-    ...GLOBAL_DEFAULT_SETTINGS,
-    ...provider.defaults
+    ...DEFAULT_SETTINGS,
+    ...(stored[SETTINGS_KEY] || {})
   }
 }
 
-export async function getSettings(provider: VideoProvider): Promise<ProviderSettings> {
-  const key = getSettingsKey(provider.id)
-  const stored = await chrome.storage.local.get(key)
-  return {
-    ...getProviderDefaults(provider),
-    ...(stored[key] || {})
-  }
-}
-
-export async function setSettings(
-  provider: VideoProvider,
-  settings: ProviderSettings
-): Promise<void> {
+export async function setSettings(settings: Settings): Promise<void> {
   await chrome.storage.local.set({
-    [getSettingsKey(provider.id)]: settings
+    [SETTINGS_KEY]: settings
   })
 }

@@ -78,7 +78,7 @@ describe("find-tab-resource handler", () => {
 
   it("rejects resource scans for another host", async () => {
     const response = await sendFindTabResource({
-      videoUrl: "https://www.youtube.com/watch?v=abc"
+      videoUrl: "https://example.com/video/abc"
     })
 
     expect(response).toEqual({

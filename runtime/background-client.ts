@@ -53,11 +53,7 @@ export async function fetchImages(
   urls: string[],
   signal?: AbortSignal
 ): Promise<string[]> {
-  const response = await sendAbortable(
-    "fetch-images",
-    { urls },
-    signal
-  )
+  const response = await sendAbortable("fetch-images", { urls }, signal)
 
   if (!response?.success || !response.dataUrls) {
     throw new Error(response?.error || "Failed to fetch images")
@@ -66,20 +62,19 @@ export async function fetchImages(
   return response.dataUrls
 }
 
-export async function runProviderAction<TResponse = unknown>(
-  providerId: string,
+export async function runRecurbateAction<TResponse = unknown>(
   action: string,
   payload?: unknown,
   signal?: AbortSignal
 ): Promise<TResponse> {
   const response = await sendAbortable(
-    "provider-action",
-    { action, payload, providerId },
+    "recurbate-action",
+    { action, payload },
     signal
   )
 
   if (!response?.success) {
-    throw new Error(response?.error || "Provider action failed")
+    throw new Error(response?.error || "Recurbate action failed")
   }
 
   return response.data as TResponse

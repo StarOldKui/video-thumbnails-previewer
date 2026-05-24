@@ -16,49 +16,52 @@ import { createPortal } from "react-dom"
 
 import cssText from "data-text:~style.css"
 import { PreviewPanel } from "~components/PreviewPanel"
-import { findHostProviders, findProvider } from "~providers/registry"
-import type {
-  DisplayMode,
-  PreviewData,
-  PreviewState,
-  ProviderSettings,
-  VideoProvider
-} from "~providers/types"
+import {
+  RECURBATE_FEATURES,
+  RECURBATE_MOUNT,
+  loadRecurbatePreview
+} from "~recurbate"
+import {
+  getRecurbatePageKey,
+  isRecurbateUrl
+} from "~recurbate/url"
 import {
   fetchImages,
   findResource,
   openTabs,
-  runProviderAction
+  runRecurbateAction
 } from "~runtime/background-client"
-import {
-  recoverGeneratedTimestamps,
-  waitForVideoDuration
-} from "~runtime/processing"
-import { getSettingsKey, getSettings } from "~runtime/storage"
+import { getSettings, SETTINGS_KEY } from "~runtime/storage"
+import type { DisplayMode, PreviewData, PreviewState, Settings } from "~runtime/types"
 
 export const config: PlasmoCSConfig = {
-  matches: [
-    "*://*.youtube.com/*",
-    "*://*.twitch.tv/*",
-    "*://*.recu.me/*",
-    "*://*.missav.ws/*",
-    "*://*.missav.com/*",
-    "*://*.pornhub.com/view_video.php*",
-    "*://*.pornhub.com/model/*/videos*",
-    "*://*.pimpbunny.com/videos/*"
-  ],
+  matches: ["*://*.recu.me/*", "*://*.recu.club/*"],
   all_frames: false
 }
 
 export const getOverlayAnchor: PlasmoGetOverlayAnchor = async () =>
   document.body
 
-export const getShadowHostId: PlasmoGetShadowHostId = () => "vtp-root"
+export const getShadowHostId: PlasmoGetShadowHostId = () => "rtp-root"
 
 export const getStyle: PlasmoGetStyle = () => {
   const style = document.createElement("style")
   style.textContent = cssText
   return style
+}
+
+interface OpenPreviewMessage {
+  type: "rtp:open-preview"
+  pageKey: string
+  mode: DisplayMode
+}
+
+interface PortalMountProps {
+  children: ReactNode
+  hostTag?: "div" | "span"
+  insertPosition?: InsertPosition
+  selector: string
+  variant: "button" | "embedded"
 }
 
 function useCurrentUrl(): URL {
@@ -104,7 +107,7 @@ function useCurrentUrl(): URL {
 
 function usePageStyles(): void {
   useEffect(() => {
-    const id = "vtp-page-styles"
+    const id = "rtp-page-styles"
     if (document.getElementById(id)) return
 
     const style = document.createElement("style")
@@ -114,58 +117,42 @@ function usePageStyles(): void {
   }, [])
 }
 
-interface OpenPreviewMessage {
-  type: "vtp:open-preview"
-  providerId: string
-  pageKey: string
-  mode: DisplayMode
+function removeStaleMounts(): void {
+  document
+    .querySelectorAll("[data-rtp-mount], #rtp-popup-container")
+    .forEach((element) => element.remove())
 }
 
-function useSettings(
-  provider: VideoProvider | null,
-  pageKey: string | null
-): ProviderSettings | null {
-  const [settings, setSettings] = useState<ProviderSettings | null>(null)
-  const settingsKey = provider ? getSettingsKey(provider.id) : null
+removeStaleMounts()
 
-  const reload = async () => {
-    if (!provider || !pageKey) {
-      setSettings(null)
-      return
-    }
-
-    setSettings(await getSettings(provider))
-  }
+function useSettings(enabled: boolean): Settings | null {
+  const [settings, setSettings] = useState<Settings | null>(null)
 
   useEffect(() => {
+    let cancelled = false
+
+    const reload = async () => {
+      const nextSettings = enabled ? await getSettings() : null
+      if (!cancelled) setSettings(nextSettings)
+    }
+
     reload()
 
     const onChanged = (
       changes: Record<string, chrome.storage.StorageChange>,
       areaName: string
     ) => {
-      if (
-        areaName === "local" &&
-        settingsKey &&
-        changes[settingsKey]
-      ) {
-        reload()
-      }
+      if (areaName === "local" && changes[SETTINGS_KEY]) reload()
     }
 
     chrome.storage.onChanged.addListener(onChanged)
-    return () => chrome.storage.onChanged.removeListener(onChanged)
-  }, [provider?.id, pageKey, settingsKey])
+    return () => {
+      cancelled = true
+      chrome.storage.onChanged.removeListener(onChanged)
+    }
+  }, [enabled])
 
   return settings
-}
-
-interface PortalMountProps {
-  children: ReactNode
-  hostTag?: "div" | "span"
-  insertPosition?: InsertPosition
-  selector: string
-  variant: "button" | "embedded"
 }
 
 function PortalMount({
@@ -188,50 +175,41 @@ function PortalMount({
       setHost(null)
     }
 
-    const removeOtherHosts = () => {
-      const mounts = Array.from(
-        document.querySelectorAll<HTMLElement>(`[data-vtp-mount="${variant}"]`)
-      )
-
-      mounts.forEach((mount) => {
-        if (mount !== currentHost) mount.remove()
-      })
-    }
-
-    const removeStaleChildren = () => {
-      while (currentHost && currentHost.children.length > 1) {
-        currentHost.firstElementChild?.remove()
-      }
+    const removeDuplicateHosts = () => {
+      document
+        .querySelectorAll<HTMLElement>(`[data-rtp-mount="${variant}"]`)
+        .forEach((element) => {
+          if (element !== currentHost) element.remove()
+        })
     }
 
     const mountIfNeeded = () => {
-      removeOtherHosts()
       const anchor = document.querySelector(selector)
       if (!anchor) {
-        removeHost()
-        return
-      }
-      if (currentHost?.isConnected && currentAnchor === anchor) {
-        removeStaleChildren()
+        if (!currentHost?.isConnected) removeHost()
         return
       }
 
-      removeHost()
+      if (!currentHost) {
+        currentHost = document.createElement(hostTag)
+        currentHost.dataset.rtpMount = variant
 
-      const nextHost = document.createElement(hostTag)
-      nextHost.dataset.vtpMount = variant
+        if (variant === "button") {
+          currentHost.style.display = "inline-flex"
+          currentHost.style.margin = "0 6px"
+        }
 
-      if (variant === "button") {
-        nextHost.style.display = "inline-flex"
-        nextHost.style.margin = "0 6px"
-        anchor.insertAdjacentElement(insertPosition, nextHost)
-      } else {
-        anchor.insertAdjacentElement(insertPosition, nextHost)
+        setHost(currentHost)
       }
 
-      currentHost = nextHost
+      if (currentHost.isConnected && currentAnchor === anchor) {
+        removeDuplicateHosts()
+        return
+      }
+
+      anchor.insertAdjacentElement(insertPosition, currentHost)
       currentAnchor = anchor
-      setHost(nextHost)
+      removeDuplicateHosts()
     }
 
     mountIfNeeded()
@@ -254,18 +232,13 @@ export default function ContentApp() {
   usePageStyles()
 
   const url = useCurrentUrl()
-  const provider = useMemo(() => findProvider(url), [url.href])
-  const hostProviders = useMemo(() => findHostProviders(url), [url.href])
-  const pageKey = useMemo(
-    () => (provider ? provider.getPageKey(url) : null),
-    [provider?.id, url.href]
-  )
-  const settings = useSettings(provider, pageKey)
+  const isSupported = isRecurbateUrl(url)
+  const pageKey = useMemo(() => getRecurbatePageKey(url), [url.href])
+  const settings = useSettings(isSupported)
   const [previewState, setPreviewState] = useState<PreviewState | null>(null)
   const [data, setData] = useState<PreviewData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const autoOpenedProviders = useRef<Set<string>>(new Set())
   const closePreviewRef = useRef<() => Promise<void>>(async () => {})
   const loadedToken = useRef<string>("")
   const modeRef = useRef<DisplayMode>("popup")
@@ -277,7 +250,7 @@ export default function ContentApp() {
 
   const setPreviewVisible = useCallback(
     (visible: boolean, mode: DisplayMode) => {
-      if (!provider || !pageKey) return
+      if (!pageKey) return
 
       setPreviewState((currentState) => {
         if (
@@ -296,26 +269,48 @@ export default function ContentApp() {
         }
       })
     },
-    [provider?.id, pageKey]
+    [pageKey]
   )
 
   const closePreview = useCallback(async () => {
-    if (!provider || !pageKey || !settings) return
+    if (!pageKey || !settings) return
     setPreviewVisible(false, previewState?.mode || settings.displayMode)
     setData(null)
     setError(null)
     setLoading(false)
-  }, [
-    provider?.id,
-    pageKey,
-    previewState?.mode,
-    settings?.displayMode,
-    setPreviewVisible
-  ])
+  }, [pageKey, previewState?.mode, settings?.displayMode, setPreviewVisible])
 
   useEffect(() => {
     closePreviewRef.current = closePreview
   }, [closePreview])
+
+  useEffect(() => {
+    const isPreviewButtonEvent = (event: Event) =>
+      event.target instanceof Element &&
+      Boolean(event.target.closest(".rtp-button"))
+
+    const stopPreviewButtonEvent = (event: Event) => {
+      if (!isPreviewButtonEvent(event)) return
+      event.stopPropagation()
+    }
+
+    const onPreviewButtonClick = (event: MouseEvent) => {
+      if (!isPreviewButtonEvent(event)) return
+      event.preventDefault()
+      event.stopPropagation()
+      togglePreviewRef.current()
+    }
+
+    document.addEventListener("pointerdown", stopPreviewButtonEvent, true)
+    document.addEventListener("mousedown", stopPreviewButtonEvent, true)
+    document.addEventListener("click", onPreviewButtonClick, true)
+
+    return () => {
+      document.removeEventListener("pointerdown", stopPreviewButtonEvent, true)
+      document.removeEventListener("mousedown", stopPreviewButtonEvent, true)
+      document.removeEventListener("click", onPreviewButtonClick, true)
+    }
+  }, [])
 
   const scrollToVideo = useCallback((selector = "video") => {
     document
@@ -323,12 +318,11 @@ export default function ContentApp() {
       ?.scrollIntoView({ behavior: "smooth", block: "center" })
   }, [])
 
-  const visible =
-    Boolean(provider && pageKey && previewState?.visible) &&
-    previewState?.pageKey === pageKey
-  const canRenderEmbedded =
-    visible && previewState?.mode === "embedded" && provider?.mount?.embedded
-  const mode = canRenderEmbedded ? "embedded" : "popup"
+  const visible = Boolean(
+    pageKey && previewState?.visible && previewState.pageKey === pageKey
+  )
+  const mode =
+    visible && previewState?.mode === "embedded" ? "embedded" : "popup"
 
   useEffect(() => {
     modeRef.current = mode
@@ -344,46 +338,39 @@ export default function ContentApp() {
   }, [scrollToVideo])
 
   useEffect(() => {
+    if (!isSupported) return
+
     const cleanups: Array<() => void> = []
 
-    for (const hostProvider of hostProviders) {
-      if (!hostProvider.features?.length) continue
+    for (const feature of RECURBATE_FEATURES) {
+      if (!feature.matches(url)) continue
 
-      for (const feature of hostProvider.features) {
-        if (!feature.matches(url)) continue
-        const cleanup = feature.mount({
-          fetchImages,
-          findResource,
-          openTabs,
-          runProviderAction: <TResponse = unknown,>(
-            action: string,
-            payload?: unknown
-          ) =>
-            runProviderAction<TResponse>(hostProvider.id, action, payload)
-        })
-        if (typeof cleanup === "function") cleanups.push(cleanup)
-      }
+      const cleanup = feature.mount({
+        fetchImages,
+        findResource,
+        openTabs,
+        runRecurbateAction
+      })
+
+      if (typeof cleanup === "function") cleanups.push(cleanup)
     }
 
     return () => cleanups.forEach((cleanup) => cleanup())
-  }, [hostProviders, url.href])
+  }, [isSupported, url.href])
 
   useEffect(() => {
-    if (!provider || !pageKey || !settings?.autoOpen) return
+    loadedToken.current = ""
+    setData(null)
+    setError(null)
+    setLoading(false)
 
-    if (provider.autoOpenScope === "tab") {
-      if (autoOpenedProviders.current.has(provider.id)) return
-      autoOpenedProviders.current.add(provider.id)
+    if (!pageKey || !settings?.autoOpen) {
+      setPreviewState(null)
+      return
     }
 
     setPreviewVisible(true, settings.displayMode)
-  }, [
-    provider?.id,
-    provider?.autoOpenScope,
-    pageKey,
-    settings?.autoOpen,
-    setPreviewVisible
-  ])
+  }, [pageKey, settings?.autoOpen, setPreviewVisible])
 
   useEffect(() => {
     if (!pageKey || !settings) return
@@ -401,7 +388,7 @@ export default function ContentApp() {
   }, [pageKey, settings?.displayMode])
 
   togglePreviewRef.current = () => {
-    if (!provider || !pageKey || !settings) return
+    if (!pageKey || !settings) return
 
     setPreviewState((currentState) => {
       const isVisible =
@@ -409,9 +396,7 @@ export default function ContentApp() {
 
       return {
         visible: !isVisible,
-        mode: isVisible
-          ? currentState.mode
-          : settings.displayMode,
+        mode: isVisible ? currentState.mode : settings.displayMode,
         pageKey,
         updatedAt: Date.now()
       }
@@ -424,17 +409,10 @@ export default function ContentApp() {
       _sender: chrome.runtime.MessageSender,
       sendResponse: (response?: unknown) => void
     ) => {
-      if (message?.type !== "vtp:open-preview") return
-      const currentUrl = new URL(location.href)
-      const currentProvider = findProvider(currentUrl)
-      const currentPageKey = currentProvider?.getPageKey(currentUrl) || null
+      if (message?.type !== "rtp:open-preview") return
 
-      if (
-        !currentProvider ||
-        !currentPageKey ||
-        message.providerId !== currentProvider.id ||
-        message.pageKey !== currentPageKey
-      ) {
+      const currentPageKey = getRecurbatePageKey(new URL(location.href))
+      if (!currentPageKey || message.pageKey !== currentPageKey) {
         sendResponse({ success: false })
         return
       }
@@ -453,33 +431,20 @@ export default function ContentApp() {
   }, [])
 
   useEffect(() => {
-    setPreviewState((currentState) => {
-      if (!currentState || !pageKey) return null
-      if (currentState.pageKey === pageKey) return currentState
-      if (!currentState.visible) return null
+    if (!pageKey || !settings || !visible || !previewState) return
 
-      return {
-        ...currentState,
-        pageKey,
-        updatedAt: Date.now()
-      }
-    })
-    setData(null)
-    setError(null)
-    setLoading(false)
-    loadedToken.current = ""
-  }, [provider?.id, pageKey])
-
-  useEffect(() => {
-    if (!provider || !pageKey || !settings || !visible || !previewState) return
-
-    const token = `${provider.id}:${pageKey}:${previewState.updatedAt}`
+    const token = `${pageKey}:${previewState.updatedAt}`
     if (loadedToken.current === token) return
     loadedToken.current = token
 
     let cancelled = false
     const controller = new AbortController()
-    const loadContext = {
+
+    setLoading(true)
+    setError(null)
+    setData(null)
+
+    loadRecurbatePreview({
       pageKey,
       settings,
       afterThumbnailSeek,
@@ -490,30 +455,18 @@ export default function ContentApp() {
       fetchImages: (urls: string[]) => fetchImages(urls, controller.signal),
       findResource: (videoUrl: string, pattern: string, timeoutMs?: number) =>
         findResource(videoUrl, pattern, timeoutMs, controller.signal),
-      runProviderAction: <TResponse = unknown,>(
+      runRecurbateAction: <TResponse = unknown,>(
         action: string,
         payload?: unknown
-      ) =>
-        runProviderAction<TResponse>(
-          provider.id,
-          action,
-          payload,
-          controller.signal
-        )
-    }
-    setLoading(true)
-    setError(null)
-    setData(null)
-
-    provider
-      .loadPreview(loadContext)
+      ) => runRecurbateAction<TResponse>(action, payload, controller.signal)
+    })
       .then((result) => {
         if (cancelled) return
         setData(result)
       })
       .catch((loadError) => {
-        if (cancelled) return
-        if (controller.signal.aborted) return
+        if (cancelled || controller.signal.aborted) return
+        setData(null)
         setError(
           loadError instanceof Error ? loadError.message : String(loadError)
         )
@@ -529,7 +482,6 @@ export default function ContentApp() {
     }
   }, [
     afterThumbnailSeek,
-    provider?.id,
     pageKey,
     Boolean(settings),
     visible,
@@ -537,39 +489,8 @@ export default function ContentApp() {
     scrollToVideo
   ])
 
-  useEffect(() => {
-    if (!data?.seekToTime) return
-    if (data.thumbnails.some((thumbnail) => typeof thumbnail.timestamp === "number")) return
-    if (data.metadata.videoDuration) {
-      setData((currentData) =>
-        currentData === data
-          ? recoverGeneratedTimestamps(currentData, data.metadata.videoDuration)
-          : currentData
-      )
-      return
-    }
+  if (!isSupported || !settings || !pageKey) return null
 
-    let cancelled = false
-
-    waitForVideoDuration(document.querySelector("video"), 30000).then(
-      (duration) => {
-        if (cancelled || !duration) return
-        setData((currentData) =>
-          currentData === data
-            ? recoverGeneratedTimestamps(currentData, duration)
-            : currentData
-        )
-      }
-    )
-
-    return () => {
-      cancelled = true
-    }
-  }, [data])
-
-  if (!provider || !pageKey || !settings) return null
-
-  const title = "Video Thumbnails Previewer"
   const panel = (
     <PreviewPanel
       data={data}
@@ -577,36 +498,27 @@ export default function ContentApp() {
       loading={loading}
       mode={mode}
       onClose={closePreview}
-      title={title}
+      title="Recurbate Thumbnails Previewer"
     />
   )
 
   return (
-    <div className="vtp-root">
-      {provider.mount?.button ? (
-        <PortalMount
-          hostTag="span"
-          selector={provider.mount.button}
-          variant="button">
-          <button
-            className={`vtp-button vtp-button-${provider.id}${
-              provider.id === "recurbate" ||
-              provider.id === "missav" ||
-              provider.id === "pornhub"
-                ? " plyr__control"
-                : ""
-            }`}
-            onClick={() => togglePreviewRef.current()}
-            type="button">
-            Thumbnails
-          </button>
-        </PortalMount>
-      ) : null}
+    <div className="rtp-root">
+      <PortalMount
+        hostTag="span"
+        selector={RECURBATE_MOUNT.button}
+        variant="button">
+        <button
+          className="rtp-button rtp-button-recurbate plyr__control"
+          type="button">
+          Thumbnails
+        </button>
+      </PortalMount>
 
-      {visible && mode === "embedded" && provider.mount?.embedded ? (
+      {visible && mode === "embedded" ? (
         <PortalMount
-          insertPosition={provider.mount.embeddedPosition || "afterbegin"}
-          selector={provider.mount.embedded}
+          insertPosition={RECURBATE_MOUNT.embeddedPosition || "afterbegin"}
+          selector={RECURBATE_MOUNT.embedded}
           variant="embedded">
           {panel}
         </PortalMount>

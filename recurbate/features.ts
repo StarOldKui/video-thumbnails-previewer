@@ -1,5 +1,5 @@
 import { Zip, ZipPassThrough } from "fflate"
-import type { ProviderFeature } from "~providers/types"
+import type { RecurbateFeature } from "~runtime/types"
 
 interface VideoLink {
   href: string
@@ -180,11 +180,30 @@ function getPerformerZipName(): string {
   return `recurbate_${safeName}.zip`
 }
 
+function createPageNumbers(start: number, end: number): number[] {
+  return Array.from({ length: end - start + 1 }, (_, index) => start + index)
+}
+
+function createActionButton(
+  buttonGroup: HTMLElement,
+  text: string,
+  dataAttribute: string,
+  before: Node | null
+): HTMLButtonElement {
+  const button = document.createElement("button")
+  button.type = "button"
+  button.setAttribute(dataAttribute, "1")
+  button.textContent = text
+  button.className = ACTION_BUTTON_CLASS
+  buttonGroup.insertBefore(button, before)
+  return button
+}
+
 async function savePages(
   pageNumbers: number[],
   button: HTMLButtonElement,
   buttonText: string,
-  context: Parameters<ProviderFeature["mount"]>[0]
+  context: Parameters<RecurbateFeature["mount"]>[0]
 ): Promise<void> {
   if (button.textContent?.includes("Saving")) return
 
@@ -254,16 +273,16 @@ async function savePages(
 
 function mountOpenAllButton(
   buttonGroup: HTMLElement,
-  context: Parameters<ProviderFeature["mount"]>[0]
+  context: Parameters<RecurbateFeature["mount"]>[0]
 ): void {
-  if (buttonGroup.querySelector("[data-vtp-open-all]")) return
+  if (buttonGroup.querySelector("[data-rtp-open-all]")) return
 
-  const button = document.createElement("button")
-  button.type = "button"
-  button.dataset.vtpOpenAll = "1"
-  button.textContent = "Open All"
-  button.className = ACTION_BUTTON_CLASS
-  buttonGroup.insertBefore(button, buttonGroup.firstChild)
+  const button = createActionButton(
+    buttonGroup,
+    "Open All",
+    "data-rtp-open-all",
+    buttonGroup.firstChild
+  )
 
   button.addEventListener("click", async () => {
     if (button.textContent === "Open All Clicked") return
@@ -276,23 +295,26 @@ function mountOpenAllButton(
 
 function mountSaveButtons(
   buttonGroup: HTMLElement,
-  context: Parameters<ProviderFeature["mount"]>[0]
+  context: Parameters<RecurbateFeature["mount"]>[0]
 ): void {
   const pagination = document.querySelector(".pager ul.pagination")
   const totalPages = pagination
     ? Number.parseInt(pagination.getAttribute("data-pg-count") || "1", 10)
     : 1
 
-  if (!buttonGroup.querySelector("[data-vtp-save-range]")) {
-    const button = document.createElement("button")
-    button.type = "button"
-    button.dataset.vtpSaveRange = "1"
-    button.textContent = "Save Range"
-    button.className = ACTION_BUTTON_CLASS
-    buttonGroup.insertBefore(button, buttonGroup.firstChild)
+  if (!buttonGroup.querySelector("[data-rtp-save-range]")) {
+    const button = createActionButton(
+      buttonGroup,
+      "Save Range",
+      "data-rtp-save-range",
+      buttonGroup.firstChild
+    )
 
     button.addEventListener("click", async () => {
-      const input = window.prompt(`Enter page range (format: 1-${totalPages})`, `1-${totalPages}`)
+      const input = window.prompt(
+        `Enter page range (format: 1-${totalPages})`,
+        `1-${totalPages}`
+      )
       if (!input) return
 
       const match = input.trim().match(/^(\d+)-(\d+)$/)
@@ -309,7 +331,7 @@ function mountSaveButtons(
       }
 
       await savePages(
-        Array.from({ length: end - start + 1 }, (_, index) => start + index),
+        createPageNumbers(start, end),
         button,
         "Save Range",
         context
@@ -317,20 +339,17 @@ function mountSaveButtons(
     })
   }
 
-  if (!buttonGroup.querySelector("[data-vtp-save-all]")) {
-    const button = document.createElement("button")
-    button.type = "button"
-    button.dataset.vtpSaveAll = "1"
-    button.textContent = "Save All"
-    button.className = ACTION_BUTTON_CLASS
-    buttonGroup.insertBefore(
-      button,
-      buttonGroup.querySelector("[data-vtp-open-all]")
+  if (!buttonGroup.querySelector("[data-rtp-save-all]")) {
+    const button = createActionButton(
+      buttonGroup,
+      "Save All",
+      "data-rtp-save-all",
+      buttonGroup.querySelector("[data-rtp-open-all]")
     )
 
     button.addEventListener("click", async () => {
       await savePages(
-        Array.from({ length: totalPages }, (_, index) => index + 1),
+        createPageNumbers(1, totalPages),
         button,
         "Save All",
         context
@@ -339,7 +358,7 @@ function mountSaveButtons(
   }
 }
 
-export const recurbateFeatures: ProviderFeature[] = [
+export const recurbateFeatures: RecurbateFeature[] = [
   {
     id: "recurbate-performer-actions",
     matches(url) {

@@ -12,7 +12,7 @@ import {
   fetchImages,
   findResource,
   openTabs,
-  runProviderAction
+  runRecurbateAction
 } from "~runtime/background-client"
 
 describe("background client", () => {
@@ -20,39 +20,49 @@ describe("background client", () => {
     mocks.sendToBackground.mockReset()
   })
 
-  it("sends provider id with provider actions", async () => {
+  it("sends Recurbate actions without extra site metadata", async () => {
     mocks.sendToBackground.mockResolvedValue({
       success: true,
-      data: ["ok"]
+      data: null
     })
 
     await expect(
-      runProviderAction("missav", "thumbnail-urls", { pageKey: "abc" })
-    ).resolves.toEqual(["ok"])
+      runRecurbateAction("seek", { timestamp: 120 })
+    ).resolves.toBeNull()
 
     expect(mocks.sendToBackground).toHaveBeenCalledWith({
-      name: "provider-action",
+      name: "recurbate-action",
       body: {
-        providerId: "missav",
-        action: "thumbnail-urls",
-        payload: { pageKey: "abc" }
+        action: "seek",
+        payload: { timestamp: 120 }
       }
     })
   })
 
   it("wraps image fetch, resource lookup, and tab opening responses", async () => {
     mocks.sendToBackground
-      .mockResolvedValueOnce({ success: true, dataUrls: ["data:image/png;base64,a"] })
-      .mockResolvedValueOnce({ success: true, url: "https://example.com/a.jpg" })
+      .mockResolvedValueOnce({
+        success: true,
+        dataUrls: ["data:image/png;base64,a"]
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        url: "https://mediafront.club/a-stripe.jpg"
+      })
       .mockResolvedValueOnce({ success: true, openedCount: 2 })
 
-    await expect(fetchImages(["https://example.com/a.jpg"])).resolves.toEqual([
-      "data:image/png;base64,a"
-    ])
-    await expect(findResource("https://example.com/video", "-stripe", 1000)).resolves.toBe(
-      "https://example.com/a.jpg"
-    )
-    await expect(openTabs(["https://a.example", "https://b.example"])).resolves.toBe(2)
+    await expect(
+      fetchImages(["https://mediafront.club/a-stripe.jpg"])
+    ).resolves.toEqual(["data:image/png;base64,a"])
+    await expect(
+      findResource("https://recu.me/demo/video/123/play", "-stripe", 1000)
+    ).resolves.toBe("https://mediafront.club/a-stripe.jpg")
+    await expect(
+      openTabs([
+        "https://recu.me/demo/video/123/play",
+        "https://recu.me/demo/video/456/play"
+      ])
+    ).resolves.toBe(2)
   })
 
   it("throws response errors", async () => {
@@ -61,19 +71,24 @@ describe("background client", () => {
       error: "Nope"
     })
 
-    await expect(fetchImages(["https://example.com/a.jpg"])).rejects.toThrow(
+    await expect(fetchImages(["https://mediafront.club/a.jpg"])).rejects.toThrow(
       "Nope"
     )
   })
 
   it("sends a cancel request when an abortable message is aborted", async () => {
     mocks.sendToBackground.mockImplementation((message) => {
-      if (message.name === "cancel-request") return Promise.resolve({ success: true })
+      if (message.name === "cancel-request") {
+        return Promise.resolve({ success: true })
+      }
       return new Promise(() => {})
     })
 
     const controller = new AbortController()
-    const request = fetchImages(["https://example.com/a.jpg"], controller.signal)
+    const request = fetchImages(
+      ["https://mediafront.club/a.jpg"],
+      controller.signal
+    )
     controller.abort()
 
     await expect(request).rejects.toThrow("Request aborted")
