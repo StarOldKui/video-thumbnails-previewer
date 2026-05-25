@@ -56,11 +56,11 @@ function PopupFrame({ children }: { children: ReactNode }) {
       <div className="rtp-popup-content">
         <div className="rtp-popup-header">
           <img
-            alt="Recurbate Thumbnails Previewer Logo"
+            alt="Video Thumbnails Previewer Logo"
             className="rtp-popup-logo"
             src={logoUrl}
           />
-          <div className="rtp-popup-brand">Recurbate Thumbnails Previewer</div>
+          <div className="rtp-popup-brand">Video Thumbnails Previewer</div>
         </div>
         {children}
       </div>

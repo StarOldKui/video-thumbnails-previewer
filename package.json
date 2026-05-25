@@ -1,9 +1,9 @@
 {
-  "name": "recurbate-thumbnails-previewer",
-  "displayName": "Recurbate Thumbnails Previewer",
+  "name": "video-thumbnails-previewer",
+  "displayName": "Video Thumbnails Previewer",
   "version": "2.0.0",
   "packageManager": "pnpm@9.15.4",
-  "description": "Preview Recurbate thumbnails on recu.me and recu.club.",
+  "description": "Preview video thumbnails on supported websites.",
   "author": "Alen",
   "license": "MIT",
   "scripts": {
@@ -30,9 +30,9 @@
     "vitest": "2.1.9"
   },
   "manifest": {
-    "name": "Recurbate Thumbnails Previewer",
+    "name": "Video Thumbnails Previewer",
     "version": "2.0.0",
-    "description": "Preview Recurbate thumbnails on recu.me and recu.club.",
+    "description": "Preview video thumbnails on supported websites.",
     "permissions": [
       "activeTab",
       "scripting",

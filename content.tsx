@@ -498,7 +498,7 @@ export default function ContentApp() {
       loading={loading}
       mode={mode}
       onClose={closePreview}
-      title="Recurbate Thumbnails Previewer"
+      title="Video Thumbnails Previewer"
     />
   )
 

@@ -9,10 +9,10 @@
 
 ## Product Boundary
 
-- Product name: Recurbate Thumbnails Previewer.
+- Product name: Video Thumbnails Previewer.
 - Project path: `/Users/alen/Shrimpfall-Goose/Code/video-thumbnails-previewer-v2`.
 - This directory is the Plasmo MV3 browser extension root.
-- The project boundary is Recurbate content-script UI, popup settings, local extension state, thumbnail image processing, and background extension capabilities.
+- The project boundary is content-script UI, popup settings, local extension state, thumbnail image processing, and background extension capabilities.
 - Supported page hosts are `recu.me` and `recu.club`.
 - The extension fetches timeline stripe images from Recurbate resource hosts such as `mediafront.club`.
 - Hosted services, account-based product flows, and support for other websites are outside the current extension boundary.
@@ -20,7 +20,6 @@
 ## Runtime Sources Of Truth
 
 - Extension metadata and manifest inputs: `package.json`.
-- Coding-agent project instructions: `AGENTS.md`.
 - Content script entry: `content.tsx`.
 - Popup entry: `popup.tsx`.
 - Recurbate URL detection: `recurbate/url.ts`.
@@ -122,7 +121,6 @@
 
 ## Read-First Files
 
-- `AGENTS.md`
 - `package.json`
 - `content.tsx`
 - `popup.tsx`
